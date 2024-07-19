@@ -66,12 +66,26 @@ int main() {
 	printf("verb %s\n", verb);
 	printf("path %s\n", path);
 
-	char *ok = "HTTP/1.1 200 OK\r\n\r\n";
-	char *not_found = "HTTP/1.1 404 Not Found\r\n\r\n";
-	char *resp = ok;
-	if (strncmp(path, "/", strlen(path)) != 0) {
-		resp = not_found;
+	char *ok = "HTTP/1.1 200 OK";
+	char *not_found = "HTTP/1.1 404 Not Found";
+	char *status = ok;
+	char body[BUFF_SIZE] = "";
+	char resp[BUFF_SIZE * 5] = "";
+
+	if (strncmp(path, "/echo/", 6) == 0) {
+		strncpy(body, path + 6, strlen(path + 6));
+	} else if (strncmp(path, "/", strlen(path)) != 0) {
+		status = not_found;
 	}
+
+	strcat(resp, status);
+	strcat(resp, "\r\n");
+	strcat(resp, "Content-Type: text/plain\r\n");
+	char content_length_header[BUFF_SIZE] = "";
+	sprintf(content_length_header, "Content-Length: %lu\r\n", strlen(body));
+	strcat(resp, content_length_header);
+	strcat(resp, "\r\n");
+	strcat(resp, body);
 
 	if (send(client_fd, resp, strlen(resp), 0) == -1) {
 		printf("Sending failed: %s\n", strerror(errno));
