@@ -48,8 +48,14 @@ int main() {
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 	
-	accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 	printf("Client connected\n");
+
+	char *resp = "HTTP/1.1 200 OK\r\n\r\n";
+	if (send(client_fd, resp, strlen(resp), 0) == -1) {
+		printf("Sending failed: %s\n", strerror(errno));
+		return 1;
+	}
 	close(server_fd);
 
 	return 0;
