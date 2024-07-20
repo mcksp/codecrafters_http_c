@@ -9,6 +9,20 @@
 
 #define BUFF_SIZE 1024
 
+struct header {
+	char name[BUFF_SIZE];
+	char value[BUFF_SIZE];
+};
+
+char* header_val(char* name, struct header* headers, int headers_len) {
+	for (int i = 0; i < headers_len; i++) {
+		if (strncmp(headers[i].name, name, BUFF_SIZE) == 0) {
+			return headers[i].value;
+		}
+	}
+	return NULL;
+}
+
 int main() {
 	setbuf(stdout, NULL);
 
@@ -54,17 +68,48 @@ int main() {
 	printf("Client connected\n");
 
 	char buff[BUFF_SIZE] = "";
+	char *curr = buff;
+	char *next = buff;
 	if (recv(client_fd, buff, sizeof(buff), 0) == -1) {
 		printf("Receiving failed: %s\n", strerror(errno));
 		return 1;
 	}
+	buff[BUFF_SIZE - 1] = 0;
+
+	strtok_r(curr, "\r\n", &next);
+	char status_line[BUFF_SIZE] = "";
+	strncpy(status_line, curr, BUFF_SIZE);
+	curr = next + 1;
 
 	char verb[BUFF_SIZE] = "";
 	char path[BUFF_SIZE] = "";
-	sscanf(buff, "%s %s", verb, path);
+	char protocol[BUFF_SIZE] = "";
+	sscanf(status_line, "%s %s %s", verb, path, protocol);
 
 	printf("verb %s\n", verb);
 	printf("path %s\n", path);
+
+	struct header headers[32];
+	int headers_len = 32;
+	for(int i = 0; i < 32; i++) {
+		strtok_r(curr, "\r\n", &next);
+		if (strlen(curr) > 4) {
+			char *val = NULL;
+			strtok_r(curr, ":", &val);
+			strncpy(headers[i].name, curr, BUFF_SIZE);
+			strncpy(headers[i].value, val + 1, BUFF_SIZE);
+		} else {
+			curr = next + 1;
+			headers_len = i;
+			break;
+		}
+		curr = next + 1;
+	}
+
+	for (int i = 0; i < headers_len; i++) {
+		printf("name: %s, value: %s\n", headers[i].name, headers[i].value);
+	}
+	
 
 	char *ok = "HTTP/1.1 200 OK";
 	char *not_found = "HTTP/1.1 404 Not Found";
@@ -73,8 +118,15 @@ int main() {
 	char resp[BUFF_SIZE * 5] = "";
 
 	if (strncmp(path, "/echo/", 6) == 0) {
-		strncpy(body, path + 6, strlen(path + 6));
-	} else if (strncmp(path, "/", strlen(path)) != 0) {
+		strncpy(body, path + 6, BUFF_SIZE);
+	} else if (strncmp(path, "/user-agent", BUFF_SIZE) == 0) {
+		char *val = header_val("User-Agent", headers, headers_len);
+		if (val != NULL) {
+			strncpy(body, val, BUFF_SIZE);
+		} else {
+			strncpy(body, "no user-agent provided", BUFF_SIZE);
+		}
+	} else if (strncmp(path, "/", BUFF_SIZE) != 0) {
 		status = not_found;
 	}
 
