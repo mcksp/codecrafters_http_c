@@ -9,6 +9,8 @@
 
 #define BUFF_SIZE 1024
 
+char *directory = NULL;
+
 struct header {
 	char name[BUFF_SIZE];
 	char value[BUFF_SIZE];
@@ -21,6 +23,26 @@ char* header_val(char* name, struct header* headers, int headers_len) {
 		}
 	}
 	return NULL;
+}
+
+void response(char *status, char *content_type, char *body, int socket) {
+	FILE *socketf = fdopen(socket, "w");
+	fprintf(socketf, "%s\r\n", status);
+
+	if (content_type != NULL) {
+		fprintf(socketf, "Content-Type: %s\r\n", content_type);
+	}
+	if (body != NULL) {
+		fprintf(socketf, "Content-Length: %lu\r\n", strlen(body));
+	}
+	fprintf(socketf, "\r\n");
+
+	if (body != NULL) {
+		fputs(body, socketf);
+	}
+
+	fclose(socketf);
+	close(socket);
 }
 
 void handle_request(int client_fd) {
@@ -69,42 +91,69 @@ void handle_request(int client_fd) {
 	
 
 	char *ok = "HTTP/1.1 200 OK";
+	char *bad_request = "HTTP/1.1 400 Bad Request";
 	char *not_found = "HTTP/1.1 404 Not Found";
-	char *status = ok;
+
+	char *type_text = "text/plain";
+	char *type_octet = "application/octet-stream";
+
 	char body[BUFF_SIZE] = "";
 	char resp[BUFF_SIZE * 5] = "";
 
 	if (strncmp(path, "/echo/", 6) == 0) {
-		strncpy(body, path + 6, BUFF_SIZE);
+		response(ok, type_text, path + 6, client_fd);
+	} else  if (strncmp(path, "/files/", 7) == 0) {
+		char filename[BUFF_SIZE] = "";
+		strncpy(filename, path + 7, BUFF_SIZE);
+		if (directory == NULL) {
+			printf("no directory specified\n");
+			return;
+		}
+
+		char filepath[BUFF_SIZE] = "";
+		snprintf(filepath, BUFF_SIZE, "%s%s", directory, filename);
+
+		FILE *f = fopen(filepath, "r");
+		if (f == NULL) {
+			printf("couldn't find file: %s\n", filepath);
+			response(not_found, type_text, "file not found", client_fd);
+			return;
+		}
+		fseek(f, 0, SEEK_END);
+		long file_size = ftell(f);
+		fseek(f, 0, SEEK_SET);
+
+		printf("file size: %ld\n", file_size);
+		char *file_content = calloc(file_size + 1, sizeof(char));
+		fread(file_content, sizeof(char), file_size, f);
+		file_content[file_size] = 0;
+		fclose(f);
+
+		response(ok, type_octet, file_content, client_fd);
 	} else if (strncmp(path, "/user-agent", BUFF_SIZE) == 0) {
 		char *val = header_val("User-Agent", headers, headers_len);
 		if (val != NULL) {
-			strncpy(body, val, BUFF_SIZE);
+			response(ok, type_text, val, client_fd);
 		} else {
-			strncpy(body, "no user-agent provided", BUFF_SIZE);
+			response(bad_request, type_text, "User-Agent header not found", client_fd);
 		}
-	} else if (strncmp(path, "/", BUFF_SIZE) != 0) {
-		status = not_found;
-	}
-
-	strcat(resp, status);
-	strcat(resp, "\r\n");
-	strcat(resp, "Content-Type: text/plain\r\n");
-	char content_length_header[BUFF_SIZE] = "";
-	sprintf(content_length_header, "Content-Length: %lu\r\n", strlen(body));
-	strcat(resp, content_length_header);
-	strcat(resp, "\r\n");
-	strcat(resp, body);
-
-	if (send(client_fd, resp, strlen(resp), 0) == -1) {
-		printf("Sending failed: %s\n", strerror(errno));
+	} else if (strncmp(path, "/", BUFF_SIZE) == 0) {
+		response(ok, type_text, "ok", client_fd);
+	} else {
+		response(not_found, NULL, NULL, client_fd);
 	}
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 	setbuf(stdout, NULL);
 
 	printf("Logs from your program will appear here!\n");
+	for (int i = 1; i < argc - 1; i++) {
+		if (strcmp(argv[i], "--directory") == 0 && strlen(argv[i + 1]) > 0) {
+			directory = argv[i + 1];
+			break;
+		}
+	}
 
 	int server_fd, client_addr_len;
 	struct sockaddr_in client_addr;
