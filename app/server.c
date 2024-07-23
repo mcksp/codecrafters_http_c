@@ -37,10 +37,16 @@ void response(char *status, char *content_type, char *body, char *encoding, int 
 	char *curr = NULL;
 	int gzip = 0;
 	char zipped[BUFF_SIZE] = "";
+	unsigned long body_length = 0;
 
+	if (body != NULL) {
+		body_length = strlen(body);
+	}
+	
 	if (encoding != NULL) {
 		curr = strtok_r(encoding, ", ", &next);
 	}
+
 	while (curr != NULL) {
 		if (strncmp(curr, "gzip", BUFF_SIZE) == 0) {
 			fprintf(socketf, "Content-Encoding: gzip\r\n");
@@ -52,37 +58,32 @@ void response(char *status, char *content_type, char *body, char *encoding, int 
 	}
 
 	if (gzip && body != NULL) {
-		z_stream defstream;
-		defstream.zalloc = Z_NULL;
-		defstream.zfree = Z_NULL;
-		defstream.opaque = Z_NULL;
+		z_stream z = {0};
+		deflateInit2(&z, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 0x1F, 8, Z_DEFAULT_STRATEGY);
 
-		defstream.avail_in = strlen(body) + 1;
-		defstream.next_in = (Bytef *) body;		
-		defstream.avail_out = BUFF_SIZE;
-		defstream.next_out = (Bytef *) zipped;
+		z.avail_in = strlen(body) + 1;
+		z.next_in = (Bytef *) body;		
+		z.avail_out = BUFF_SIZE;
+		z.next_out = (Bytef *) zipped;
 
-		deflateInit(&defstream, Z_BEST_COMPRESSION);
-		deflate(&defstream, Z_FINISH);
-		deflateEnd(&defstream);
+		deflate(&z, Z_FINISH);
+		body_length = z.total_out;
+		deflateEnd(&z);
 		body = zipped;
 	}
 
-	printf("hejka\n");
-
 	if (body != NULL) {
-		fprintf(socketf, "Content-Length: %lu\r\n", strlen(body));
+		fprintf(socketf, "Content-Length: %lu\r\n", body_length);
 	}
 
 	fprintf(socketf, "\r\n");
 
 	if (body != NULL) {
-		fputs(body, socketf);
+		fwrite(body, sizeof(char), body_length, socketf);
 	}
 
 	fclose(socketf);
 	close(socket);
-	printf("koniec\n");
 }
 
 void handle_request(int client_fd) {
