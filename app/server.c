@@ -59,9 +59,9 @@ void response(char *status, char *content_type, char *body, char *encoding, int 
 
 	if (gzip && body != NULL) {
 		z_stream z = {0};
-		deflateInit2(&z, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 0x1F, 8, Z_DEFAULT_STRATEGY);
+		deflateInit2(&z, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY);
 
-		z.avail_in = strlen(body) + 1;
+		z.avail_in = strlen(body);
 		z.next_in = (Bytef *) body;		
 		z.avail_out = BUFF_SIZE;
 		z.next_out = (Bytef *) zipped;
