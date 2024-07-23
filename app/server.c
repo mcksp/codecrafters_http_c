@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include "zlib.h"
 
 #define BUFF_SIZE 1024
 
@@ -32,20 +33,45 @@ void response(char *status, char *content_type, char *body, char *encoding, int 
 	if (content_type != NULL) {
 		fprintf(socketf, "Content-Type: %s\r\n", content_type);
 	}
-	if (body != NULL) {
-		fprintf(socketf, "Content-Length: %lu\r\n", strlen(body));
-	}
-
 	char *next = NULL;
 	char *curr = NULL;
-	curr = strtok_r(encoding, ", ", &next);
+	int gzip = 0;
+	char zipped[BUFF_SIZE] = "";
+
+	if (encoding != NULL) {
+		curr = strtok_r(encoding, ", ", &next);
+	}
 	while (curr != NULL) {
 		if (strncmp(curr, "gzip", BUFF_SIZE) == 0) {
 			fprintf(socketf, "Content-Encoding: gzip\r\n");
+			gzip = 1;
 			break;
 		}
 
 		curr = strtok_r(NULL, ", ", &next);
+	}
+
+	if (gzip && body != NULL) {
+		z_stream defstream;
+		defstream.zalloc = Z_NULL;
+		defstream.zfree = Z_NULL;
+		defstream.opaque = Z_NULL;
+
+		defstream.avail_in = strlen(body) + 1;
+		defstream.next_in = (Bytef *) body;		
+		defstream.avail_out = BUFF_SIZE;
+		defstream.next_out = (Bytef *) zipped;
+
+		deflateInit(&defstream, Z_BEST_COMPRESSION);
+		deflate(&defstream, Z_FINISH);
+		deflateEnd(&defstream);
+		body = zipped;
+	}
+
+	printf("hejka\n");
+
+	if (body != NULL) {
+		fprintf(socketf, "Content-Length: %lu\r\n", strlen(body));
 	}
 
 	fprintf(socketf, "\r\n");
@@ -56,6 +82,7 @@ void response(char *status, char *content_type, char *body, char *encoding, int 
 
 	fclose(socketf);
 	close(socket);
+	printf("koniec\n");
 }
 
 void handle_request(int client_fd) {
