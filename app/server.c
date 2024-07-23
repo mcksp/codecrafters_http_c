@@ -84,6 +84,7 @@ void handle_request(int client_fd) {
 		}
 		curr = next + 1;
 	}
+	char *payload = curr;
 
 	for (int i = 0; i < headers_len; i++) {
 		printf("name: %s, value: %s\n", headers[i].name, headers[i].value);
@@ -91,8 +92,10 @@ void handle_request(int client_fd) {
 	
 
 	char *ok = "HTTP/1.1 200 OK";
+	char *created = "HTTP/1.1 201 CREATED";
 	char *bad_request = "HTTP/1.1 400 Bad Request";
 	char *not_found = "HTTP/1.1 404 Not Found";
+	char *internal = "HTTP/1.1 500 Internal Server Error";
 
 	char *type_text = "text/plain";
 	char *type_octet = "application/octet-stream";
@@ -113,23 +116,37 @@ void handle_request(int client_fd) {
 		char filepath[BUFF_SIZE] = "";
 		snprintf(filepath, BUFF_SIZE, "%s%s", directory, filename);
 
-		FILE *f = fopen(filepath, "r");
-		if (f == NULL) {
-			printf("couldn't find file: %s\n", filepath);
-			response(not_found, type_text, "file not found", client_fd);
-			return;
+		if (strncmp(verb, "GET", BUFF_SIZE) == 0) {
+			FILE *f = fopen(filepath, "r");
+			if (f == NULL) {
+				printf("couldn't find file: %s\n", filepath);
+				response(not_found, type_text, "file not found", client_fd);
+				return;
+			}
+			fseek(f, 0, SEEK_END);
+			long file_size = ftell(f);
+			fseek(f, 0, SEEK_SET);
+
+			printf("file size: %ld\n", file_size);
+			char *file_content = calloc(file_size + 1, sizeof(char));
+			fread(file_content, sizeof(char), file_size, f);
+			file_content[file_size] = 0;
+			fclose(f);
+
+			response(ok, type_octet, file_content, client_fd);
+		} else if (strncmp(verb, "POST", BUFF_SIZE) == 0) {
+			FILE *f = fopen(filepath, "w");
+			if (f == NULL) {
+				printf("couldn't find file: %s\n", filepath);
+				response(internal, type_text, "couldn't save file", client_fd);
+				return;
+			}
+			fwrite(payload, sizeof(char), strlen(payload), f);
+			response(created, NULL, NULL, client_fd);
+			
+		} else {
+			response(not_found, NULL, NULL, client_fd);
 		}
-		fseek(f, 0, SEEK_END);
-		long file_size = ftell(f);
-		fseek(f, 0, SEEK_SET);
-
-		printf("file size: %ld\n", file_size);
-		char *file_content = calloc(file_size + 1, sizeof(char));
-		fread(file_content, sizeof(char), file_size, f);
-		file_content[file_size] = 0;
-		fclose(f);
-
-		response(ok, type_octet, file_content, client_fd);
 	} else if (strncmp(path, "/user-agent", BUFF_SIZE) == 0) {
 		char *val = header_val("User-Agent", headers, headers_len);
 		if (val != NULL) {
