@@ -25,7 +25,7 @@ char* header_val(char* name, struct header* headers, int headers_len) {
 	return NULL;
 }
 
-void response(char *status, char *content_type, char *body, int socket) {
+void response(char *status, char *content_type, char *body, char *encoding, int socket) {
 	FILE *socketf = fdopen(socket, "w");
 	fprintf(socketf, "%s\r\n", status);
 
@@ -34,6 +34,11 @@ void response(char *status, char *content_type, char *body, int socket) {
 	}
 	if (body != NULL) {
 		fprintf(socketf, "Content-Length: %lu\r\n", strlen(body));
+	}
+	if (encoding != NULL) {
+		if (strncmp(encoding, "gzip", BUFF_SIZE) == 0) {
+			fprintf(socketf, "Content-Encoding: gzip\r\n");
+		}
 	}
 	fprintf(socketf, "\r\n");
 
@@ -85,6 +90,8 @@ void handle_request(int client_fd) {
 	}
 	char *payload = curr + 2;
 
+	char *encoding = header_val("Accept-Encoding", headers, headers_len);
+
 	for (int i = 0; i < headers_len; i++) {
 		printf("name: %s, value: %s\n", headers[i].name, headers[i].value);
 	}
@@ -103,7 +110,7 @@ void handle_request(int client_fd) {
 	char resp[BUFF_SIZE * 5] = "";
 
 	if (strncmp(path, "/echo/", 6) == 0) {
-		response(ok, type_text, path + 6, client_fd);
+		response(ok, type_text, path + 6, encoding, client_fd);
 	} else  if (strncmp(path, "/files/", 7) == 0) {
 		char filename[BUFF_SIZE] = "";
 		strncpy(filename, path + 7, BUFF_SIZE);
@@ -119,7 +126,7 @@ void handle_request(int client_fd) {
 			FILE *f = fopen(filepath, "r");
 			if (f == NULL) {
 				printf("couldn't find file: %s\n", filepath);
-				response(not_found, type_text, "file not found", client_fd);
+				response(not_found, type_text, "file not found", encoding, client_fd);
 				return;
 			}
 			fseek(f, 0, SEEK_END);
@@ -132,31 +139,31 @@ void handle_request(int client_fd) {
 			file_content[file_size] = 0;
 			fclose(f);
 
-			response(ok, type_octet, file_content, client_fd);
+			response(ok, type_octet, file_content, encoding, client_fd);
 		} else if (strncmp(verb, "POST", BUFF_SIZE) == 0) {
 			FILE *f = fopen(filepath, "w");
 			if (f == NULL) {
 				printf("couldn't find file: %s\n", filepath);
-				response(internal, type_text, "couldn't save file", client_fd);
+				response(internal, type_text, "couldn't save file", encoding, client_fd);
 				return;
 			}
 			fwrite(payload, sizeof(char), strlen(payload), f);
 			fclose(f);
-			response(created, NULL, NULL, client_fd);
+			response(created, NULL, NULL, encoding, client_fd);
 		} else {
-			response(not_found, NULL, NULL, client_fd);
+			response(not_found, NULL, NULL, encoding, client_fd);
 		}
 	} else if (strncmp(path, "/user-agent", BUFF_SIZE) == 0) {
 		char *val = header_val("User-Agent", headers, headers_len);
 		if (val != NULL) {
-			response(ok, type_text, val, client_fd);
+			response(ok, type_text, val, encoding, client_fd);
 		} else {
-			response(bad_request, type_text, "User-Agent header not found", client_fd);
+			response(bad_request, type_text, "User-Agent header not found", encoding, client_fd);
 		}
 	} else if (strncmp(path, "/", BUFF_SIZE) == 0) {
-		response(ok, type_text, "ok", client_fd);
+		response(ok, type_text, "ok", encoding, client_fd);
 	} else {
-		response(not_found, NULL, NULL, client_fd);
+		response(not_found, NULL, NULL, encoding, client_fd);
 	}
 }
 
