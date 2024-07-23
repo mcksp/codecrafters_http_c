@@ -72,19 +72,18 @@ void handle_request(int client_fd) {
 	int headers_len = 32;
 	for(int i = 0; i < 32; i++) {
 		strtok_r(curr, "\r\n", &next);
-		if (strlen(curr) > 4) {
+		if (curr[0] != '\r') {
 			char *val = NULL;
 			strtok_r(curr, ":", &val);
 			strncpy(headers[i].name, curr, BUFF_SIZE);
 			strncpy(headers[i].value, val + 1, BUFF_SIZE);
 		} else {
-			curr = next + 1;
 			headers_len = i;
 			break;
 		}
 		curr = next + 1;
 	}
-	char *payload = curr;
+	char *payload = curr + 2;
 
 	for (int i = 0; i < headers_len; i++) {
 		printf("name: %s, value: %s\n", headers[i].name, headers[i].value);
@@ -92,7 +91,7 @@ void handle_request(int client_fd) {
 	
 
 	char *ok = "HTTP/1.1 200 OK";
-	char *created = "HTTP/1.1 201 CREATED";
+	char *created = "HTTP/1.1 201 Created";
 	char *bad_request = "HTTP/1.1 400 Bad Request";
 	char *not_found = "HTTP/1.1 404 Not Found";
 	char *internal = "HTTP/1.1 500 Internal Server Error";
@@ -142,8 +141,8 @@ void handle_request(int client_fd) {
 				return;
 			}
 			fwrite(payload, sizeof(char), strlen(payload), f);
+			fclose(f);
 			response(created, NULL, NULL, client_fd);
-			
 		} else {
 			response(not_found, NULL, NULL, client_fd);
 		}
