@@ -35,11 +35,19 @@ void response(char *status, char *content_type, char *body, char *encoding, int 
 	if (body != NULL) {
 		fprintf(socketf, "Content-Length: %lu\r\n", strlen(body));
 	}
-	if (encoding != NULL) {
-		if (strncmp(encoding, "gzip", BUFF_SIZE) == 0) {
+
+	char *next = NULL;
+	char *curr = NULL;
+	curr = strtok_r(encoding, ", ", &next);
+	while (curr != NULL) {
+		if (strncmp(curr, "gzip", BUFF_SIZE) == 0) {
 			fprintf(socketf, "Content-Encoding: gzip\r\n");
+			break;
 		}
+
+		curr = strtok_r(NULL, ", ", &next);
 	}
+
 	fprintf(socketf, "\r\n");
 
 	if (body != NULL) {
